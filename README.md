@@ -1,6 +1,6 @@
 # cmpm-121-demo-3
 
-This is the default `README.md` file for the D3 projects. If the student is
-aware of what's going on in their project, they should immediately replace this
-with something more descriptive. It sure would be embarrassing if they forgot to
-do that...
+## general references and sources
+more immediate sources are commented above use-case\
+(Nate Valley's D3B commit)[https://github.com/NateValley/cmpm-121-demo-3/commit/be03dc6b9f958e4272ddb539c1ff9e37798843c2#diff-4fab5baaca5c14d2de62d8d2fceef376ddddcc8e9509d86cfa5643f51b89ce3dR27] was used as reference for what integrating board.ts might look like. Our interfaces are quite different, so there were lots of changes\
+I talked with friends taking this class about their approaches

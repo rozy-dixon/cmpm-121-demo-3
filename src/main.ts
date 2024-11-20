@@ -1,12 +1,29 @@
-// ---------------------------------------------- NOTES
+//#region --------------------------------------- NOTES
 
 /*
-[option + shift + f] = format
-*/
 
-// ---------------------------------------------- IMPORTS
+[option + shift + f] = format
+
+function getPosition() {
+  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve(
+          leaflet.latLng(position.coords.latitude, position.coords.longitude),
+        );
+      },
+    );
+  });
+}
+
+*/
+//#endregion
+
+//#region -------------------------------------- IMPORTS
 
 import leaflet from "leaflet";
+//import { Board } from "./board.ts";
 
 import "leaflet/dist/leaflet.css";
 import "./style.css";
@@ -16,9 +33,16 @@ import "./leafletWorkaround.ts";
 import luck from "./luck.ts";
 import { Marker, Rectangle } from "npm:@types/leaflet@^1.9.14";
 
-// ---------------------------------------------- INITS
+import { Cell } from "./board.ts";
+
+//#endregion
+
+//#region --------------------------------------- INITS
 
 const APP_NAME = "orange couscous";
+
+const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
+//const HOME = leaflet.latLng(36.95976838448142, -122.06144213676454);
 
 const START_ZOOM = 18;
 const MAX_ZOOM = 19;
@@ -28,11 +52,17 @@ const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 13;
 const CACHE_SPAWN_PROBABILITY = 0.1;
 
-// ---------------------------------------------- CLASSES AND INTERFACES
+//#endregion
+
+//#region --------------------------------------- INTERFACES
+
+/* interface Coin {
+  location: Cache | Player;
+  id: number;
+} */
 
 interface Cache {
-  i: number;
-  j: number;
+  cell: Cell;
   pointValue: number;
   rect: Rectangle;
 }
@@ -42,11 +72,14 @@ interface Player {
   points: number;
 }
 
-// ---------------------------------------------- SET-UP
+//#endregion
+
+//#region --------------------------------------- SET-UP
 
 document.getElementById("title")!.innerHTML = APP_NAME;
 
-const startPosition = await getPosition();
+const startPosition = OAKES_CLASSROOM;
+//const startPosition = await getPosition();
 
 const map = leaflet.map(document.getElementById("map")!, {
   center: startPosition,
@@ -78,7 +111,9 @@ player.marker.bindTooltip(`${player.points}`);
 
 const cacheArray: Array<Cache> = [];
 
-// ---------------------------------------------- CONTENT
+//#endregion
+
+//#region --------------------------------------- CONTENT
 
 // [ ] on move end, update neighborhood
 
@@ -93,7 +128,9 @@ for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
   }
 }
 
-// ---------------------------------------------- HELPER FUNCTIONS
+//#endregion
+
+//#region --------------------------------------- HELPER FUNCTIONS
 
 function spawnCache(i: number, j: number) {
   const origin: leaflet.LatLng = startPosition;
@@ -116,8 +153,7 @@ function spawnCache(i: number, j: number) {
   );
 
   const cache: Cache = {
-    i: i,
-    j: j,
+    cell: { i, j },
     pointValue: pointValue,
     rect: rect,
   };
@@ -132,7 +168,7 @@ function interact(cache: Cache) {
     // src = https://chat.brace.tools/s/136a1f49-5351-482a-a52f-3c15ebcdda58
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-      <div class="pop-up">(${cache.i},${cache.j}), <span id="value">${cache.pointValue}</span>.</div>
+      <div class="pop-up">(${cache.cell.i},${cache.cell.j}), <span id="value">${cache.pointValue}</span>.</div>
       <button id="collect">collect</button>
       <button id="deposit">deposit</button>`;
 
@@ -140,9 +176,7 @@ function interact(cache: Cache) {
     popupDiv.querySelector<HTMLButtonElement>("#collect")?.addEventListener(
       "click",
       () => {
-        cache.pointValue = alterPointValue(Number(cache.pointValue), 1);
-        popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache
-          .pointValue.toString();
+        adjustCache(1, cache, popupDiv);
       },
     );
 
@@ -150,9 +184,7 @@ function interact(cache: Cache) {
     popupDiv.querySelector<HTMLButtonElement>("#deposit")?.addEventListener(
       "click",
       () => {
-        cache.pointValue = alterPointValue(Number(cache.pointValue), -1);
-        popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache
-          .pointValue.toString();
+        adjustCache(-1, cache, popupDiv);
       },
     );
 
@@ -160,20 +192,15 @@ function interact(cache: Cache) {
   });
 }
 
-function getPosition() {
-  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve(
-          leaflet.latLng(position.coords.latitude, position.coords.longitude),
-        );
-      },
-    );
-  });
+function adjustCache(amount: number, cache: Cache, popupDiv: HTMLSpanElement) {
+  cache.pointValue = alterPointValue(Number(cache.pointValue), amount);
+  popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache
+    .pointValue.toString();
 }
 
 function alterPointValue(pointValue: number, adjust: number) {
   player.marker.setTooltipContent(`${player.points += adjust}`);
   return pointValue -= adjust;
 }
+
+//#endregion
