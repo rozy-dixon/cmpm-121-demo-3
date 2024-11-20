@@ -4,19 +4,6 @@
 
 [option + shift + f] = format
 
-function getPosition() {
-  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve(
-          leaflet.latLng(position.coords.latitude, position.coords.longitude),
-        );
-      },
-    );
-  });
-}
-
 */
 //#endregion
 
@@ -41,13 +28,16 @@ import { Cell } from "./board.ts";
 
 const APP_NAME = "orange couscous";
 
+// anchors
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
-//const HOME = leaflet.latLng(36.95976838448142, -122.06144213676454);
+const _HOME = leaflet.latLng(36.95976838448142, -122.06144213676454);
 
+// map initial variables
 const START_ZOOM = 18;
 const MAX_ZOOM = 19;
 const MIN_ZOOM = 10;
 
+// board initial variables
 const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 13;
 const CACHE_SPAWN_PROBABILITY = 0.1;
@@ -69,6 +59,7 @@ interface Cache {
 
 interface Player {
   coords: LatLng;
+  cell: Cell;
   marker: Marker;
   coins: Array<Coin>;
 }
@@ -80,8 +71,8 @@ interface Player {
 document.getElementById("title")!.innerHTML = APP_NAME;
 
 const startPosition = OAKES_CLASSROOM;
-//const startPosition = await getPosition();
 
+// create map to access lat/lng values in which to anchor player and caches
 const map = leaflet.map(document.getElementById("map")!, {
   center: startPosition,
   zoom: START_ZOOM,
@@ -98,8 +89,11 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }).addTo(map);
 
+// create board
 const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
 
+// create player
+// start player at starting position and no coins
 const playerMarker = leaflet.marker(startPosition, {
   draggable: true,
   autoPan: true,
@@ -107,24 +101,26 @@ const playerMarker = leaflet.marker(startPosition, {
 
 const player: Player = {
   coords: startPosition,
+  cell: board.getCellForPoint(startPosition),
   coins: [],
   marker: playerMarker,
 };
 
-player.marker.bindTooltip(`${player.coins}`);
-
-const cacheArray: Array<Cache> = [];
+player.marker.bindTooltip(`${player.coins.length}`);
 
 //#endregion
 
 //#region --------------------------------------- CONTENT
 
+// populate board with caches
 spawnSurroundings(player.coords);
 
 //#endregion
 
 //#region --------------------------------------- HELPER FUNCTIONS
 
+// create cache
+// anchor to cell, fill with coins, anchor rectangle
 function spawnCache(cell: Cell) {
   const rect = leaflet.rectangle(board.getCellBounds(cell), {
     color: "#000000",
@@ -148,21 +144,23 @@ function spawnCache(cell: Cell) {
     cache.coins.push({ location: cache, id: id });
   }
 
-  interact(cache);
+  // player will interact with cache via collect and deposit
+  allowCacheInteraction(cache);
 
   return cache;
 }
 
+// populate cells around provided coordinates
 function spawnSurroundings(coords: LatLng) {
   board.getCellsNearPoint(coords).forEach((cell) => {
     if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const cache = spawnCache(cell);
-      cacheArray.push(cache);
+      spawnCache(cell);
     }
   });
 }
 
-function interact(cache: Cache) {
+// add collect and deposit capabilities to provided cache
+function allowCacheInteraction(cache: Cache) {
   cache.rect.bindPopup(() => {
     // src = https://chat.brace.tools/s/136a1f49-5351-482a-a52f-3c15ebcdda58
     const popupDiv = document.createElement("div");
@@ -197,6 +195,8 @@ function interact(cache: Cache) {
   });
 }
 
+// functions as both collect and deposit functions
+// allows for chunking
 function adjustCache(
   amount: number,
   cache: Cache,
@@ -207,11 +207,8 @@ function adjustCache(
     return;
   }
 
-  let enterArray: Array<Coin>;
-  let exitArray: Array<Coin>;
-
-  amount < 0 ? exitArray = player.coins : exitArray = cache.coins;
-  amount < 0 ? enterArray = cache.coins : enterArray = player.coins;
+  const exitArray = amount < 0 ? player.coins : cache.coins;
+  const enterArray = amount < 0 ? cache.coins : player.coins;
 
   enterArray.push(coin);
   exitArray.splice(exitArray.length - Math.abs(amount), Math.abs(amount));
@@ -231,6 +228,20 @@ function _getTop(coins: Array<Coin>) {
 
 function _getBottom(coins: Array<Coin>) {
   return coins[0];
+}
+
+// get position of (actual) player
+function _getPosition() {
+  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve(
+          leaflet.latLng(position.coords.latitude, position.coords.longitude),
+        );
+      },
+    );
+  });
 }
 
 //#endregion
