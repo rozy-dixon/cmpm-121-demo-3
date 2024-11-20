@@ -23,7 +23,7 @@ function getPosition() {
 //#region -------------------------------------- IMPORTS
 
 import leaflet from "leaflet";
-//import { Board } from "./board.ts";
+import { Board } from "./board.ts";
 
 import "leaflet/dist/leaflet.css";
 import "./style.css";
@@ -31,7 +31,7 @@ import "./style.css";
 import "./leafletWorkaround.ts";
 
 import luck from "./luck.ts";
-import { Marker, Rectangle } from "npm:@types/leaflet@^1.9.14";
+import { LatLng, Marker, Rectangle } from "npm:@types/leaflet@^1.9.14";
 
 import { Cell } from "./board.ts";
 
@@ -56,20 +56,21 @@ const CACHE_SPAWN_PROBABILITY = 0.1;
 
 //#region --------------------------------------- INTERFACES
 
-/* interface Coin {
+interface Coin {
   location: Cache | Player;
-  id: number;
-} */
+  id: string;
+}
 
 interface Cache {
   cell: Cell;
-  pointValue: number;
+  coins: Array<Coin>;
   rect: Rectangle;
 }
 
 interface Player {
+  coords: LatLng;
   marker: Marker;
-  points: number;
+  coins: Array<Coin>;
 }
 
 //#endregion
@@ -97,17 +98,20 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }).addTo(map);
 
+const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
+
 const playerMarker = leaflet.marker(startPosition, {
   draggable: true,
   autoPan: true,
 }).addTo(map);
 
 const player: Player = {
-  points: 0,
+  coords: startPosition,
+  coins: [],
   marker: playerMarker,
 };
 
-player.marker.bindTooltip(`${player.points}`);
+player.marker.bindTooltip(`${player.coins}`);
 
 const cacheArray: Array<Cache> = [];
 
@@ -115,31 +119,14 @@ const cacheArray: Array<Cache> = [];
 
 //#region --------------------------------------- CONTENT
 
-// [ ] on move end, update neighborhood
-
-// [ ] change marker style
-
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const cache = spawnCache(i, j);
-      cacheArray.push(cache);
-    }
-  }
-}
+spawnSurroundings(player.coords);
 
 //#endregion
 
 //#region --------------------------------------- HELPER FUNCTIONS
 
-function spawnCache(i: number, j: number) {
-  const origin: leaflet.LatLng = startPosition;
-  const bounds = leaflet.latLngBounds([
-    [origin.lat + i * TILE_DEGREES, origin.lng + j * TILE_DEGREES],
-    [origin.lat + (i + 1) * TILE_DEGREES, origin.lng + (j + 1) * TILE_DEGREES],
-  ]);
-
-  const rect = leaflet.rectangle(bounds, {
+function spawnCache(cell: Cell) {
+  const rect = leaflet.rectangle(board.getCellBounds(cell), {
     color: "#000000",
     weight: 2,
     fillColor: "#ffffff",
@@ -147,20 +134,32 @@ function spawnCache(i: number, j: number) {
   });
   rect.addTo(map);
 
-  // src = https://chat.brace.tools/s/8a5b2b11-b475-4e10-8574-fb83e9600379
-  const pointValue: number = Number(
-    Math.floor(luck([i, j, "initialValue"].toString()) * 100),
-  );
-
   const cache: Cache = {
-    cell: { i, j },
-    pointValue: pointValue,
+    cell: cell,
+    coins: [],
     rect: rect,
   };
+
+  const numCoins = Math.floor(
+    luck([cell.i, cell.j, "initialValue"].toString()) * 100,
+  );
+  for (let i = 0; i < numCoins; i++) {
+    const id: string = `${cell.i}:${cell.j}:${i}`;
+    cache.coins.push({ location: cache, id: id });
+  }
 
   interact(cache);
 
   return cache;
+}
+
+function spawnSurroundings(coords: LatLng) {
+  board.getCellsNearPoint(coords).forEach((cell) => {
+    if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
+      const cache = spawnCache(cell);
+      cacheArray.push(cache);
+    }
+  });
 }
 
 function interact(cache: Cache) {
@@ -168,7 +167,7 @@ function interact(cache: Cache) {
     // src = https://chat.brace.tools/s/136a1f49-5351-482a-a52f-3c15ebcdda58
     const popupDiv = document.createElement("div");
     popupDiv.innerHTML = `
-      <div class="pop-up">(${cache.cell.i},${cache.cell.j}), <span id="value">${cache.pointValue}</span>.</div>
+      <div class="pop-up">(${cache.cell.i},${cache.cell.j}), <span id="value">${cache.coins.length}</span>.</div>
       <button id="collect">collect</button>
       <button id="deposit">deposit</button>`;
 
@@ -176,7 +175,10 @@ function interact(cache: Cache) {
     popupDiv.querySelector<HTMLButtonElement>("#collect")?.addEventListener(
       "click",
       () => {
-        adjustCache(1, cache, popupDiv);
+        if (cache.coins.length > 0) {
+          const coin = cache.coins[cache.coins.length - 1];
+          adjustCache(1, cache, coin, popupDiv);
+        }
       },
     );
 
@@ -184,7 +186,10 @@ function interact(cache: Cache) {
     popupDiv.querySelector<HTMLButtonElement>("#deposit")?.addEventListener(
       "click",
       () => {
-        adjustCache(-1, cache, popupDiv);
+        if (player.coins.length > 0) {
+          const coin = player.coins[player.coins.length - 1];
+          adjustCache(-1, cache, coin, popupDiv);
+        }
       },
     );
 
@@ -192,15 +197,40 @@ function interact(cache: Cache) {
   });
 }
 
-function adjustCache(amount: number, cache: Cache, popupDiv: HTMLSpanElement) {
-  cache.pointValue = alterPointValue(Number(cache.pointValue), amount);
-  popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache
-    .pointValue.toString();
+function adjustCache(
+  amount: number,
+  cache: Cache,
+  coin: Coin,
+  popupDiv: HTMLSpanElement,
+) {
+  if (amount == 0) {
+    return;
+  }
+
+  let enterArray: Array<Coin>;
+  let exitArray: Array<Coin>;
+
+  amount < 0 ? exitArray = player.coins : exitArray = cache.coins;
+  amount < 0 ? enterArray = cache.coins : enterArray = player.coins;
+
+  enterArray.push(coin);
+  exitArray.splice(exitArray.length - Math.abs(amount), Math.abs(amount));
+
+  player.marker.setTooltipContent(`${player.coins.length}`);
+  popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache.coins
+    .length.toString();
 }
 
-function alterPointValue(pointValue: number, adjust: number) {
-  player.marker.setTooltipContent(`${player.points += adjust}`);
-  return pointValue -= adjust;
+//#endregion
+
+//#region --------------------------------------- GETTERS AND SETTERS
+
+function _getTop(coins: Array<Coin>) {
+  return coins[coins.length - 1];
+}
+
+function _getBottom(coins: Array<Coin>) {
+  return coins[0];
 }
 
 //#endregion
