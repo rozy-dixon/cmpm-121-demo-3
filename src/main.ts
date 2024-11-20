@@ -34,7 +34,7 @@ const _HOME = leaflet.latLng(36.95976838448142, -122.06144213676454);
 
 // map initial variables
 const START_ZOOM = 18;
-const MAX_ZOOM = 19;
+const MAX_ZOOM = 18;
 const MIN_ZOOM = 10;
 
 // board initial variables
@@ -45,6 +45,12 @@ const CACHE_SPAWN_PROBABILITY = 0.1;
 //#endregion
 
 //#region --------------------------------------- INTERFACES
+
+interface Button {
+  text: string;
+  action: () => void;
+  id: string;
+}
 
 interface Coin {
   location: Cache | Player;
@@ -70,6 +76,15 @@ interface Player {
 
 document.getElementById("title")!.innerHTML = APP_NAME;
 
+const interactionButtons: Array<Button> = [
+  { text: "↑", action: () => movePlayer(1, 0), id: "up" },
+  { text: "↓", action: () => movePlayer(-1, 0), id: "down" },
+  { text: "←", action: () => movePlayer(0, -1), id: "left" },
+  { text: "→", action: () => movePlayer(0, 1), id: "right" },
+];
+
+const buttonDiv = document.getElementById("buttons");
+
 const startPosition = OAKES_CLASSROOM;
 
 // create map to access lat/lng values in which to anchor player and caches
@@ -91,6 +106,7 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 // create board
 const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
+const cacheArray: Array<Cache> = [];
 
 // create player
 // start player at starting position and no coins
@@ -108,9 +124,27 @@ const player: Player = {
 
 player.marker.bindTooltip(`${player.coins.length}`);
 
+const playerMarkerMoved = new Event("player-marker-moved");
+
+document.addEventListener("player-marker-moved", () => {
+  console.log("hi");
+  cacheArray.forEach((cache) => map.removeLayer(cache.rect));
+
+  spawnSurroundings(player.coords);
+});
+
 //#endregion
 
 //#region --------------------------------------- CONTENT
+
+// add buttons to top of page
+interactionButtons.forEach((element) => {
+  const button = document.createElement("button");
+  button.id = element.id;
+  button.innerHTML = element.text;
+  button.addEventListener("click", element.action);
+  buttonDiv!.append(button);
+});
 
 // populate board with caches
 spawnSurroundings(player.coords);
@@ -121,7 +155,7 @@ spawnSurroundings(player.coords);
 
 // create cache
 // anchor to cell, fill with coins, anchor rectangle
-function spawnCache(cell: Cell) {
+function spawnCache(cell: Cell, coins: Array<Coin> | undefined = undefined) {
   const rect = leaflet.rectangle(board.getCellBounds(cell), {
     color: "#000000",
     weight: 2,
@@ -136,12 +170,14 @@ function spawnCache(cell: Cell) {
     rect: rect,
   };
 
-  const numCoins = Math.floor(
-    luck([cell.i, cell.j, "initialValue"].toString()) * 100,
-  );
-  for (let i = 0; i < numCoins; i++) {
-    const id: string = `${cell.i}:${cell.j}:${i}`;
-    cache.coins.push({ location: cache, id: id });
+  if (coins == undefined) {
+    const numCoins = Math.floor(
+      luck([cell.i, cell.j, "initialValue"].toString()) * 100,
+    );
+    for (let i = 0; i < numCoins; i++) {
+      const id: string = `${cell.i}:${cell.j}:${i}`;
+      cache.coins.push({ location: cache, id: id });
+    }
   }
 
   // player will interact with cache via collect and deposit
@@ -153,8 +189,17 @@ function spawnCache(cell: Cell) {
 // populate cells around provided coordinates
 function spawnSurroundings(coords: LatLng) {
   board.getCellsNearPoint(coords).forEach((cell) => {
+    let coins = undefined;
+    if (
+      cacheArray.some((cache) =>
+        cache.cell.i === cell.i && cache.cell.j === cell.j
+      )
+    ) {
+      coins = _getCache(cell)?.coins;
+    }
     if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(cell);
+      const cache = spawnCache(cell, coins);
+      cacheArray.push(cache);
     }
   });
 }
@@ -218,6 +263,20 @@ function adjustCache(
     .length.toString();
 }
 
+function movePlayer(lat: number, lng: number) {
+  const newLat = playerMarker.getLatLng().lat + (lat * TILE_DEGREES);
+  const newLng = playerMarker.getLatLng().lng + (lng * TILE_DEGREES);
+
+  playerMarker.setLatLng(leaflet.latLng(newLat, newLng));
+
+  player.coords = leaflet.latLng(newLat, newLng);
+  player.cell = board.getCellForPoint(player.coords);
+
+  console.log("Moving player:", { lat, lng });
+  document.dispatchEvent(playerMarkerMoved);
+  console.log("Event dispatched");
+}
+
 //#endregion
 
 //#region --------------------------------------- GETTERS AND SETTERS
@@ -228,6 +287,12 @@ function _getTop(coins: Array<Coin>) {
 
 function _getBottom(coins: Array<Coin>) {
   return coins[0];
+}
+
+function _getCache(cell: Cell) {
+  return cacheArray.find((existingCache) =>
+    existingCache.cell.i === cell.i && existingCache.cell.j === cell.j
+  );
 }
 
 // get position of (actual) player

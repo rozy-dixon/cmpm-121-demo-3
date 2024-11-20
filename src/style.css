@@ -37,6 +37,7 @@ h1 {
   font-size: 2em;
   font-family: Helvetica, Arial, sans-serif, system-ui;
   line-height: 1.1;
+  margin-bottom: 0rem;
 }
 
 #controlPanel {
@@ -68,6 +69,7 @@ button {
   background-color: var(--background-color-dark);
   cursor: pointer;
   transition: border-color 0.25s;
+  margin: 1rem 0.5rem;
 }
 
 button:hover {
