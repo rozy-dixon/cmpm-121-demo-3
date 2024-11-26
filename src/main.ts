@@ -61,6 +61,8 @@ interface Cache {
   cell: Cell;
   coins: Array<Coin>;
   rect: Rectangle;
+  toMemento(): string;
+  fromMemento(memento: string): void;
 }
 
 interface Player {
@@ -77,10 +79,10 @@ interface Player {
 document.getElementById("title")!.innerHTML = APP_NAME;
 
 const interactionButtons: Array<Button> = [
-  { text: "↑", action: () => movePlayer(1, 0), id: "up" },
-  { text: "↓", action: () => movePlayer(-1, 0), id: "down" },
-  { text: "←", action: () => movePlayer(0, -1), id: "left" },
-  { text: "→", action: () => movePlayer(0, 1), id: "right" },
+  { text: "↑", action: () => movePlayer(1, 0), id: "ArrowUp" },
+  { text: "↓", action: () => movePlayer(-1, 0), id: "ArrowDown" },
+  { text: "←", action: () => movePlayer(0, -1), id: "ArrowLeft" },
+  { text: "→", action: () => movePlayer(0, 1), id: "ArrowRight" },
 ];
 
 const buttonDiv = document.getElementById("buttons");
@@ -95,6 +97,7 @@ const map = leaflet.map(document.getElementById("map")!, {
   minZoom: MIN_ZOOM,
   zoomControl: true,
   scrollWheelZoom: true,
+  keyboard: false,
 });
 
 // create invisible tile layer
@@ -126,10 +129,26 @@ player.marker.bindTooltip(`${player.coins.length}`);
 
 const playerMarkerMoved = new Event("player-marker-moved");
 
-document.addEventListener("player-marker-moved", () => {
-  console.log("hi");
-  cacheArray.forEach((cache) => map.removeLayer(cache.rect));
+globalThis.addEventListener("keydown", (event: KeyboardEvent) => {
+  if (
+    ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(event.key) !==
+      -1
+  ) {
+    const interactionButton = Array.from(
+      buttonDiv?.getElementsByTagName("button") || [],
+    ).find((button) => button.id === event.key);
 
+    console.log(interactionButton?.innerHTML);
+    interactionButton?.click();
+  }
+});
+
+document.addEventListener("player-marker-moved", () => {
+  cacheArray.forEach((cache) => {
+    map.removeLayer(cache.rect);
+  });
+
+  map.setView(player.coords);
   spawnSurroundings(player.coords);
 });
 
@@ -168,6 +187,11 @@ function spawnCache(cell: Cell, coins: Array<Coin> | undefined = undefined) {
     cell: cell,
     coins: [],
     rect: rect,
+    toMemento: function (): string {
+      return "";
+    },
+    fromMemento: function (_memento: string): void {
+    },
   };
 
   if (coins == undefined) {
@@ -179,6 +203,19 @@ function spawnCache(cell: Cell, coins: Array<Coin> | undefined = undefined) {
       cache.coins.push({ location: cache, id: id });
     }
   }
+
+  // applying functions
+  cache.toMemento = function (): string {
+    return JSON.stringify({
+      coins: cache.coins,
+    });
+  };
+
+  cache.fromMemento = function (memento: string): void {
+    const state = JSON.parse(memento);
+
+    cache.coins = state.coins;
+  };
 
   // player will interact with cache via collect and deposit
   allowCacheInteraction(cache);
@@ -272,9 +309,7 @@ function movePlayer(lat: number, lng: number) {
   player.coords = leaflet.latLng(newLat, newLng);
   player.cell = board.getCellForPoint(player.coords);
 
-  console.log("Moving player:", { lat, lng });
   document.dispatchEvent(playerMarkerMoved);
-  console.log("Event dispatched");
 }
 
 //#endregion
