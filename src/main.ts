@@ -225,18 +225,17 @@ function spawnCache(cell: Cell, coins: Array<Coin> | undefined = undefined) {
 
 // populate cells around provided coordinates
 function spawnSurroundings(coords: LatLng) {
+  // src = https://chat.brace.tools/s/12df7b24-bd45-4cb3-b69c-5a982779d964
   board.getCellsNearPoint(coords).forEach((cell) => {
-    let coins = undefined;
-    if (
-      cacheArray.some((cache) =>
-        cache.cell.i === cell.i && cache.cell.j === cell.j
-      )
-    ) {
-      coins = _getCache(cell)?.coins;
+    const cache = _getCache(cell);
+    if (cache) {
+      if (!map.hasLayer(cache.rect)) {
+        map.addLayer(cache.rect);
+      }
+      return;
     }
     if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const cache = spawnCache(cell, coins);
-      cacheArray.push(cache);
+      cacheArray.push(spawnCache(cell));
     }
   });
 }
