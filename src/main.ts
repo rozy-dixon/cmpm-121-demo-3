@@ -87,6 +87,7 @@ const interactionButtons: Array<Button> = [
 ];
 
 const buttonDiv = document.getElementById("buttons");
+const coinDiv = document.getElementById("coins")! as HTMLDivElement;
 
 const startPosition = await _getPosition() as LatLng;
 
@@ -199,6 +200,8 @@ interactionButtons.forEach((element) => {
   button.addEventListener("click", element.action);
   buttonDiv!.append(button);
 });
+
+updatePlayerCoinDisplay(coinDiv, player.coins);
 
 document.getElementById('OrientPlayer')!.style.backgroundColor = "#ba6376";
 
@@ -351,6 +354,28 @@ function adjustCache(
   mementoArray = _populateMementoArray(mementoArray);
   localStorage.setItem("mementoArray", JSON.stringify(mementoArray));
   localStorage.setItem("playerCoins", JSON.stringify(player.coins));
+
+  updatePlayerCoinDisplay(coinDiv, player.coins);
+}
+
+function updatePlayerCoinDisplay(div: HTMLDivElement, coins: Array<Coin>) {
+  const buttons = Array.from(div.getElementsByClassName('coinButton'));
+  buttons.forEach(element => {
+    div.removeChild(element)
+  });
+
+  coins.forEach((element) => {
+    const button = document.createElement("button");
+    button.className = 'coinButton'
+    button.id = 'coin'
+    button.innerHTML = element.id;
+    button.addEventListener('click', () => {
+      // [ ] convert first half to cell
+      const coord = leaflet.latLng(button.innerHTML.split(":", 2))
+      map.setView(leaflet.latLng( [(coord.lat) * TILE_DEGREES, (coord.lng) * TILE_DEGREES] ))
+    })
+    div?.append(button)
+  })
 }
 
 function movePlayer(lat: number, lng: number) {
@@ -391,6 +416,7 @@ function initializeGameSession() {
   cacheArray = _populateCacheArray(cacheArray);
 
   player.coins = [];
+  player.marker.setTooltipContent(`${player.coins.length}`);
   localStorage.setItem("playerCoins", JSON.stringify(player.coins));
 
   spawnSurroundings(player.coords);
