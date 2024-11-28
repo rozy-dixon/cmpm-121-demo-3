@@ -30,7 +30,6 @@ const APP_NAME = "orange couscous";
 
 // anchors
 const OAKES_CLASSROOM = leaflet.latLng(36.98949379578401, -122.06277128548504);
-const _HOME = leaflet.latLng(36.95976838448142, -122.06144213676454);
 
 // map initial variables
 const START_ZOOM = 18;
@@ -83,21 +82,24 @@ const interactionButtons: Array<Button> = [
   { text: "↓", action: () => movePlayer(-1, 0), id: "ArrowDown" },
   { text: "←", action: () => movePlayer(0, -1), id: "ArrowLeft" },
   { text: "→", action: () => movePlayer(0, 1), id: "ArrowRight" },
+  { text: "🚮", action: () => initializeGameSession(), id: "ClearLocalStorage" },
+  { text: "🌐", action: () => orientPlayer(), id: "OrientPlayer" }
 ];
 
 const buttonDiv = document.getElementById("buttons");
 
-const startPosition = OAKES_CLASSROOM;
+const startPosition = await _getPosition() as LatLng;
 
 // create map to access lat/lng values in which to anchor player and caches
 const map = leaflet.map(document.getElementById("map")!, {
-  center: startPosition,
+  center: OAKES_CLASSROOM,
   zoom: START_ZOOM,
   maxZoom: MAX_ZOOM,
   minZoom: MIN_ZOOM,
   zoomControl: true,
   scrollWheelZoom: true,
   keyboard: false,
+  watch: true
 });
 
 // create invisible tile layer
@@ -114,6 +116,10 @@ let mementoArray: Array<string> = [];
 if (localStorage.getItem("mementoArray") != undefined) {
   mementoArray = JSON.parse(localStorage.getItem("mementoArray")!);
 }
+let playerMovementArray: Array<LatLng> = [];
+if (localStorage.getItem("playerMovementArray") != undefined) {
+  playerMovementArray = JSON.parse(localStorage.getItem("playerMovementArray")!)
+}
 
 // create player
 // start player at starting position and no coins
@@ -129,11 +135,19 @@ const player: Player = {
   marker: playerMarker,
 };
 
-if (localStorage.getItem("playerCoins")) {
+if (localStorage.getItem("playerCoins") != undefined) {
   player.coins = JSON.parse(localStorage.getItem("playerCoins")!);
 }
 
 player.marker.bindTooltip(`${player.coins.length}`);
+let tracking = false;
+map.locate();
+
+map.on('locationfound', function () {
+  if (tracking) {
+    document.dispatchEvent(playerMarkerMoved);
+  }
+});
 
 const playerMarkerMoved = new Event("player-marker-moved");
 
@@ -146,7 +160,6 @@ globalThis.addEventListener("keydown", (event: KeyboardEvent) => {
       buttonDiv?.getElementsByTagName("button") || [],
     ).find((button) => button.id === event.key);
 
-    console.log(interactionButton?.innerHTML);
     interactionButton?.click();
   }
 });
@@ -159,9 +172,20 @@ document.addEventListener("player-marker-moved", () => {
   mementoArray = _populateMementoArray(mementoArray);
   localStorage.setItem("mementoArray", JSON.stringify(mementoArray));
 
+  playerMovementArray.push(player.coords)
+  polyline.setLatLngs(playerMovementArray)
+  localStorage.setItem("playerMovementArray", JSON.stringify(playerMovementArray))
+
   map.setView(player.coords);
   spawnSurroundings(player.coords);
 });
+
+const polyline = leaflet.polyline(playerMovementArray, {
+  color: 'blue',
+  weight: 5,
+  opacity: 0.7,
+  lineJoin: 'round'
+}).addTo(map);
 
 //#endregion
 
@@ -176,11 +200,14 @@ interactionButtons.forEach((element) => {
   buttonDiv!.append(button);
 });
 
+document.getElementById('OrientPlayer')!.style.backgroundColor = "#ba6376";
+
 // populate cache array from saved data
 cacheArray = _populateCacheArray(cacheArray);
 
 // populate board with caches
 spawnSurroundings(player.coords);
+document.dispatchEvent(playerMarkerMoved);
 
 //#endregion
 
@@ -338,6 +365,34 @@ function movePlayer(lat: number, lng: number) {
   document.dispatchEvent(playerMarkerMoved);
 }
 
+function orientPlayer() {
+  const button = document.getElementById('OrientPlayer')
+  if (button?.style.backgroundColor === "#9cba63" || button?.style.backgroundColor === "rgb(156, 186, 99)") {
+    button!.style.backgroundColor = "#ba6376";  // off
+    tracking = false;
+  } else {
+    button!.style.backgroundColor = "#9cba63";  // on
+    tracking = true;
+  }
+}
+
+function initializeGameSession() {
+  _clearLocalStorage();
+
+  playerMovementArray = [];
+  polyline.setLatLngs(playerMovementArray)
+
+  mementoArray = [];
+  cacheArray = [];
+  cacheArray = _populateCacheArray(cacheArray);
+
+  player.coins = [];
+  localStorage.setItem("playerCoins", JSON.stringify(player.coins));
+
+  spawnSurroundings(player.coords);
+  document.dispatchEvent(playerMarkerMoved);
+}
+
 //#endregion
 
 //#region --------------------------------------- GETTERS AND SETTERS
@@ -390,6 +445,10 @@ function _populateCacheArray(array: Array<Cache>) {
   });
 
   return array;
+}
+
+function _clearLocalStorage() {
+  localStorage.clear()
 }
 
 //#endregion
