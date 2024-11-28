@@ -377,6 +377,10 @@ function orientPlayer() {
 }
 
 function initializeGameSession() {
+  if (!confirm('are you sure?')) {
+    return
+  }
+
   _clearLocalStorage();
 
   playerMovementArray = [];
