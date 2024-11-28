@@ -53,7 +53,7 @@ interface Button {
 }
 
 interface Coin {
-  location: Cache | Player;
+  location: Cell | Player;
   id: string;
 }
 
@@ -109,7 +109,11 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 // create board
 const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
-const cacheArray: Array<Cache> = [];
+let cacheArray: Array<Cache> = [];
+let mementoArray: Array<string> = [];
+if (localStorage.getItem("mementoArray") != undefined) {
+  mementoArray = JSON.parse(localStorage.getItem("mementoArray")!);
+}
 
 // create player
 // start player at starting position and no coins
@@ -124,6 +128,10 @@ const player: Player = {
   coins: [],
   marker: playerMarker,
 };
+
+if (localStorage.getItem("playerCoins")) {
+  player.coins = JSON.parse(localStorage.getItem("playerCoins")!);
+}
 
 player.marker.bindTooltip(`${player.coins.length}`);
 
@@ -148,6 +156,9 @@ document.addEventListener("player-marker-moved", () => {
     map.removeLayer(cache.rect);
   });
 
+  mementoArray = _populateMementoArray(mementoArray);
+  localStorage.setItem("mementoArray", JSON.stringify(mementoArray));
+
   map.setView(player.coords);
   spawnSurroundings(player.coords);
 });
@@ -164,6 +175,9 @@ interactionButtons.forEach((element) => {
   button.addEventListener("click", element.action);
   buttonDiv!.append(button);
 });
+
+// populate cache array from saved data
+cacheArray = _populateCacheArray(cacheArray);
 
 // populate board with caches
 spawnSurroundings(player.coords);
@@ -200,21 +214,30 @@ function spawnCache(cell: Cell, coins: Array<Coin> | undefined = undefined) {
     );
     for (let i = 0; i < numCoins; i++) {
       const id: string = `${cell.i}:${cell.j}:${i}`;
-      cache.coins.push({ location: cache, id: id });
+      cache.coins.push({
+        location: cell,
+        id: id,
+      });
     }
+  } else {
+    cache.coins = coins;
   }
 
   // applying functions
   cache.toMemento = function (): string {
     return JSON.stringify({
+      cell: cache.cell,
       coins: cache.coins,
     });
   };
 
   cache.fromMemento = function (memento: string): void {
     const state = JSON.parse(memento);
-
-    cache.coins = state.coins;
+    cache.cell = state.cell,
+      cache.coins = state.coins.map((coin: Coin) => ({
+        ...coin,
+        location: state.cell,
+      }));
   };
 
   // player will interact with cache via collect and deposit
@@ -225,18 +248,17 @@ function spawnCache(cell: Cell, coins: Array<Coin> | undefined = undefined) {
 
 // populate cells around provided coordinates
 function spawnSurroundings(coords: LatLng) {
+  // src = https://chat.brace.tools/s/12df7b24-bd45-4cb3-b69c-5a982779d964
   board.getCellsNearPoint(coords).forEach((cell) => {
-    let coins = undefined;
-    if (
-      cacheArray.some((cache) =>
-        cache.cell.i === cell.i && cache.cell.j === cell.j
-      )
-    ) {
-      coins = _getCache(cell)?.coins;
-    }
-    if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const cache = spawnCache(cell, coins);
-      cacheArray.push(cache);
+    const cache = _getCache(cell);
+    if (cache) {
+      if (!map.hasLayer(cache.rect)) {
+        map.addLayer(cache.rect);
+      }
+      return;
+    } else if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
+      const newCache = spawnCache(cell);
+      cacheArray.push(newCache);
     }
   });
 }
@@ -298,6 +320,10 @@ function adjustCache(
   player.marker.setTooltipContent(`${player.coins.length}`);
   popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache.coins
     .length.toString();
+
+  mementoArray = _populateMementoArray(mementoArray);
+  localStorage.setItem("mementoArray", JSON.stringify(mementoArray));
+  localStorage.setItem("playerCoins", JSON.stringify(player.coins));
 }
 
 function movePlayer(lat: number, lng: number) {
@@ -342,6 +368,28 @@ function _getPosition() {
       },
     );
   });
+}
+
+function _populateMementoArray(array: Array<string>) {
+  array = [];
+
+  cacheArray.forEach((cache) => {
+    array.push(cache.toMemento());
+  });
+
+  return array;
+}
+
+function _populateCacheArray(array: Array<Cache>) {
+  array = [];
+
+  mementoArray.forEach((memento) => {
+    const state = JSON.parse(memento);
+    const newCache = spawnCache(state.cell, state.coins);
+    array.push(newCache);
+  });
+
+  return array;
 }
 
 //#endregion
