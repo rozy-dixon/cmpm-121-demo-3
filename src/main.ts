@@ -2,7 +2,7 @@
 
 // STYLE AND WORKAROUND
 
-import "./style.css";
+import "./style/style.css";
 import "./leafletWorkaround.ts";
 import "leaflet/dist/leaflet.css";
 
@@ -15,11 +15,11 @@ import {
   _populateCacheArray,
   _populateMementoArray,
   _trySpawnNewCache,
-} from "./helper.ts";
+} from "./utils/helper.ts";
 
 // CORE FUNCTIONALITY
 
-import { Cell } from "./board.ts";
+import { Cell } from "./core/board.ts";
 import {
   Cache,
   Coin,
@@ -28,7 +28,7 @@ import {
   resetPlayerView,
   spawnSurroundings,
   updatePlayerCoinDisplay,
-} from "./map.ts";
+} from "./core/map.ts";
 
 //#endregion
 

@@ -1,14 +1,24 @@
-//#region -------------------------------------- IMPORTS
+//#region --------------------------------------- IMPORTS
 
 // EXTERNAL LIBRARIES
 
 import leaflet from "leaflet";
-import { LatLng, Marker } from "npm:@types/leaflet@^1.9.14";
+import { LatLng, Marker, Rectangle } from "npm:@types/leaflet@^1.9.14";
+
+// UTILITY
+
+import {
+  _ensureCacheIsVisible,
+  _getCache,
+  _populateCacheArray,
+  _populateMementoArray,
+  _trySpawnNewCache,
+} from "../utils/helper.ts";
 
 // CORE FUNCTIONALITY
 
 import { Board, Cell } from "./board.ts";
-import { Coin, initializeGameSession, PLAYER_MARKER_MOVED } from "../main.ts";
+import { cacheArray, mementoArray, PLAYER_MARKER_MOVED } from "../main.ts";
 
 //#endregion
 
@@ -32,6 +42,19 @@ export const NEIGHBORHOOD_SIZE = 13;
 //#endregion
 
 //#region --------------------------------------- INTERFACES
+
+export interface Coin {
+  location: Cell | Player;
+  id: string;
+}
+
+export interface Cache {
+  cell: Cell;
+  coins: Array<Coin>;
+  rect: Rectangle;
+  toMemento(): string;
+  fromMemento(memento: string): void;
+}
 
 export interface Player {
   coords: LatLng;
@@ -60,7 +83,7 @@ const interactionButtons: Array<Button> = [
   { text: "→", action: () => movePlayer(0, 1), id: "ArrowRight" },
   {
     text: "🚮",
-    action: () => initializeGameSession(),
+    action: () => initializeGameSession(mementoArray, cacheArray),
     id: "ClearLocalStorage",
   },
   { text: "🌐", action: () => orientPlayer(), id: "OrientPlayer" },
@@ -111,6 +134,13 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const startPosition = await _getPosition() as LatLng;
 
+let playerMovementArray: Array<LatLng> = [];
+if (localStorage.getItem("playerMovementArray") != undefined) {
+  playerMovementArray = JSON.parse(
+    localStorage.getItem("playerMovementArray")!,
+  );
+}
+
 // create player
 // start player at starting position and no coins
 export const PLAYER_MARKER = leaflet.marker(startPosition, {
@@ -129,6 +159,15 @@ PLAYER.marker.bindTooltip(`${PLAYER.coins.length}`);
 
 // MAP EVENT MANAGEMENT
 
+MAP.locate();
+
+const polyline = leaflet.polyline(playerMovementArray, {
+  color: "blue",
+  weight: 5,
+  opacity: 0.7,
+  lineJoin: "round",
+}).addTo(MAP);
+
 let tracking = false;
 MAP.on("locationfound", function () {
   if (tracking) {
@@ -138,21 +177,7 @@ MAP.on("locationfound", function () {
 
 //#endregion
 
-//#region --------------------------------------- FUNCTIONS
-
-// get position of (actual) player
-export function _getPosition() {
-  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve(
-          leaflet.latLng(position.coords.latitude, position.coords.longitude),
-        );
-      },
-    );
-  });
-}
+//#region --------------------------------------- PLAYER UPDATES
 
 export function updatePlayerCoinDisplay(
   div: HTMLDivElement,
@@ -193,6 +218,28 @@ export function movePlayer(lat: number, lng: number) {
   document.dispatchEvent(PLAYER_MARKER_MOVED);
 }
 
+export function resetPlayerView(
+  cacheArray: Array<Cache>,
+  mementoArray: Array<string>,
+) {
+  cacheArray.forEach((cache) => {
+    MAP.removeLayer(cache.rect);
+  });
+
+  mementoArray = _populateMementoArray(mementoArray, cacheArray);
+  localStorage.setItem("mementoArray", JSON.stringify(mementoArray));
+
+  playerMovementArray.push(PLAYER.coords);
+  polyline.setLatLngs(playerMovementArray);
+  localStorage.setItem(
+    "playerMovementArray",
+    JSON.stringify(playerMovementArray),
+  );
+
+  MAP.setView(PLAYER.coords);
+  spawnSurroundings(PLAYER.coords);
+}
+
 export function orientPlayer() {
   const button = document.getElementById("OrientPlayer");
   if (
@@ -205,6 +252,85 @@ export function orientPlayer() {
     button!.style.backgroundColor = "#9cba63"; // on
     tracking = true;
   }
+}
+
+//#endregion
+
+//#region --------------------------------------- SPAWN FUNCTIONS
+
+export function createRectangle(cell: Cell): L.Rectangle {
+  const rect = leaflet.rectangle(BOARD.getCellBounds(cell), {
+    color: "#000000",
+    weight: 2,
+    fillColor: "#ffffff",
+    fillOpacity: 0.5,
+  });
+  rect.addTo(MAP);
+  return rect;
+}
+
+export function spawnSurroundings(coords: LatLng): void {
+  const nearbyCells = BOARD.getCellsNearPoint(coords);
+
+  nearbyCells.forEach((cell) => {
+    const cache = _getCache(cell, cacheArray);
+    if (cache) {
+      _ensureCacheIsVisible(cache);
+    } else {
+      _trySpawnNewCache(cell);
+    }
+  });
+}
+
+//#endregion
+
+//#region --------------------------------------- RESETS
+
+export function initializeGameSession(
+  mementoArray: Array<string>,
+  cacheArray: Array<Cache>,
+) {
+  if (!confirm("are you sure?")) {
+    return;
+  }
+
+  clearLocalStorage();
+
+  playerMovementArray = [];
+  polyline.setLatLngs(playerMovementArray);
+
+  mementoArray = [];
+  cacheArray = [];
+  cacheArray = _populateCacheArray(cacheArray, mementoArray);
+
+  PLAYER.coins = [];
+  PLAYER.marker.setTooltipContent(`${PLAYER.coins.length}`);
+  localStorage.setItem("playerCoins", JSON.stringify(PLAYER.coins));
+
+  spawnSurroundings(PLAYER.coords);
+  document.dispatchEvent(PLAYER_MARKER_MOVED);
+}
+
+// get position of (actual) player
+export function _getPosition() {
+  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve(
+          leaflet.latLng(position.coords.latitude, position.coords.longitude),
+        );
+      },
+    );
+  });
+}
+
+function clearLocalStorage() {
+  localStorage.clear();
+
+  cacheArray.forEach((cache) => {
+    MAP.removeLayer(cache.rect);
+  });
 }
 
 //#endregion

@@ -8,10 +8,10 @@ import luck from "../luck.ts";
 
 import { Cell } from "../core/board.ts";
 
-import { Cache, cacheArray, Coin } from "../main.ts";
+import { cacheArray } from "../main.ts";
 import { spawnCache } from "../main.ts";
 
-import { MAP } from "../core/map.ts";
+import { Cache, Coin, MAP } from "../core/map.ts";
 
 //#endregion
 
