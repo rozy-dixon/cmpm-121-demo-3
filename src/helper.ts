@@ -97,7 +97,3 @@ export function _populateCacheArray(
 
   return array;
 }
-
-export function _clearLocalStorage() {
-  localStorage.clear();
-}

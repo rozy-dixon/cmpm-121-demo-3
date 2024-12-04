@@ -23,7 +23,6 @@ import { LatLng, Marker, Rectangle } from "npm:@types/leaflet@^1.9.14";
 import { Cell } from "./board.ts";
 
 import {
-  _clearLocalStorage,
   _getCache,
   _getPosition,
   _populateCacheArray,
@@ -202,12 +201,7 @@ document.dispatchEvent(playerMarkerMoved);
 
 //#region --------------------------------------- HELPER FUNCTIONS
 
-// create cache
-// anchor to cell, fill with coins, anchor rectangle
-export function spawnCache(
-  cell: Cell,
-  coins: Array<Coin> | undefined = undefined,
-) {
+function createRectangle(cell: Cell): L.Rectangle {
   const rect = leaflet.rectangle(board.getCellBounds(cell), {
     color: "#000000",
     weight: 2,
@@ -215,34 +209,25 @@ export function spawnCache(
     fillOpacity: 0.5,
   });
   rect.addTo(MAP);
+  return rect;
+}
 
-  const cache: Cache = {
-    cell: cell,
-    coins: [],
-    rect: rect,
-    toMemento: function (): string {
-      return "";
-    },
-    fromMemento: function (_memento: string): void {
-    },
-  };
-
-  if (coins == undefined) {
-    const numCoins = Math.floor(
-      luck([cell.i, cell.j, "initialValue"].toString()) * 100,
-    );
-    for (let i = 0; i < numCoins; i++) {
-      const id: string = `${cell.i}:${cell.j}:${i}`;
-      cache.coins.push({
-        location: cell,
-        id: id,
-      });
-    }
-  } else {
-    cache.coins = coins;
+function generateCoins(cell: Cell): Array<Coin> {
+  const numCoins = Math.floor(
+    luck([cell.i, cell.j, "initialValue"].toString()) * 100,
+  );
+  const coins: Array<Coin> = [];
+  for (let i = 0; i < numCoins; i++) {
+    const id: string = `${cell.i}:${cell.j}:${i}`;
+    coins.push({
+      location: cell,
+      id: id,
+    });
   }
+  return coins;
+}
 
-  // applying functions
+function attachMementoMethods(cache: Cache): void {
   cache.toMemento = function (): string {
     return JSON.stringify({
       cell: cache.cell,
@@ -252,32 +237,47 @@ export function spawnCache(
 
   cache.fromMemento = function (memento: string): void {
     const state = JSON.parse(memento);
-    cache.cell = state.cell,
-      cache.coins = state.coins.MAP((coin: Coin) => ({
-        ...coin,
-        location: state.cell,
-      }));
+    cache.cell = state.cell;
+    cache.coins = state.coins.map((coin: Coin) => ({
+      ...coin,
+      location: state.cell,
+    }));
+  };
+}
+
+export function spawnCache(
+  cell: Cell,
+  coins: Array<Coin> | undefined = undefined,
+): Cache {
+  const rect = createRectangle(cell);
+  const cache: Cache = {
+    cell: cell,
+    coins: coins ? coins : generateCoins(cell),
+    rect: rect,
+    toMemento: function (): string {
+      return ""; // placeholder function
+    },
+    fromMemento: function (_memento: string): void {
+      // placeholder function
+    },
   };
 
-  // player will interact with cache via collect and deposit
+  attachMementoMethods(cache);
+
   allowCacheInteraction(cache);
 
   return cache;
 }
 
-// populate cells around provided coordinates
-function spawnSurroundings(coords: LatLng) {
-  // src = https://chat.brace.tools/s/12df7b24-bd45-4cb3-b69c-5a982779d964
-  board.getCellsNearPoint(coords).forEach((cell) => {
+function spawnSurroundings(coords: LatLng): void {
+  const nearbyCells = board.getCellsNearPoint(coords);
+
+  nearbyCells.forEach((cell) => {
     const cache = _getCache(cell, cacheArray);
     if (cache) {
-      if (!MAP.hasLayer(cache.rect)) {
-        MAP.addLayer(cache.rect);
-      }
-      return;
-    } else if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const newCache = spawnCache(cell);
-      cacheArray.push(newCache);
+      _ensureCacheIsVisible(cache);
+    } else {
+      _trySpawnNewCache(cell);
     }
   });
 }
@@ -371,6 +371,40 @@ function updatePlayerCoinDisplay(div: HTMLDivElement, coins: Array<Coin>) {
   });
 }
 
+function initializeGameSession() {
+  if (!confirm("are you sure?")) {
+    return;
+  }
+
+  _clearLocalStorage();
+
+  playerMovementArray = [];
+  polyline.setLatLngs(playerMovementArray);
+
+  mementoArray = [];
+  cacheArray = [];
+  cacheArray = _populateCacheArray(cacheArray, mementoArray);
+
+  player.coins = [];
+  player.marker.setTooltipContent(`${player.coins.length}`);
+  localStorage.setItem("playerCoins", JSON.stringify(player.coins));
+
+  spawnSurroundings(player.coords);
+  document.dispatchEvent(playerMarkerMoved);
+}
+
+function _clearLocalStorage() {
+  localStorage.clear();
+
+  cacheArray.forEach((cache) => {
+    MAP.removeLayer(cache.rect);
+  });
+}
+
+//#endregion
+
+//#region --------------------------------------- FUNCTIONS TO MOVE
+
 function movePlayer(lat: number, lng: number) {
   const newLat = playerMarker.getLatLng().lat + (lat * TILE_DEGREES);
   const newLng = playerMarker.getLatLng().lng + (lng * TILE_DEGREES);
@@ -397,26 +431,17 @@ function orientPlayer() {
   }
 }
 
-function initializeGameSession() {
-  if (!confirm("are you sure?")) {
-    return;
+function _ensureCacheIsVisible(cache: Cache): void {
+  if (!MAP.hasLayer(cache.rect)) {
+    MAP.addLayer(cache.rect); // Re-add it to the map if it's missing.
   }
+}
 
-  _clearLocalStorage();
-
-  playerMovementArray = [];
-  polyline.setLatLngs(playerMovementArray);
-
-  mementoArray = [];
-  cacheArray = [];
-  cacheArray = _populateCacheArray(cacheArray, mementoArray);
-
-  player.coins = [];
-  player.marker.setTooltipContent(`${player.coins.length}`);
-  localStorage.setItem("playerCoins", JSON.stringify(player.coins));
-
-  spawnSurroundings(player.coords);
-  document.dispatchEvent(playerMarkerMoved);
+function _trySpawnNewCache(cell: Cell): void {
+  if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
+    const newCache = spawnCache(cell); // Use the refactored `spawnCache`.
+    cacheArray.push(newCache); // Add it to the runtime cache array.
+  }
 }
 
 //#endregion
