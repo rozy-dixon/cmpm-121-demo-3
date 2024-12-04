@@ -83,15 +83,15 @@ button:focus-visible {
 }
 
 #coin {
-  font-size: .75em;
-  padding: 0.3em .6em;
-  margin: .15rem;
+  font-size: 0.75em;
+  padding: 0.3em 0.6em;
+  margin: 0.15rem;
 }
 
 #coins {
   overflow: auto;
   white-space: nowrap;
-  padding: .3rem 0.1rem;
+  padding: 0.3rem 0.1rem;
 }
 
 @media (prefers-color-scheme: light) {
