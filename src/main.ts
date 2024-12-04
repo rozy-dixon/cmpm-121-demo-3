@@ -17,7 +17,6 @@ import luck from "./luck.ts";
 import {
   _ensureCacheIsVisible,
   _getCache,
-  _getPosition,
   _populateCacheArray,
   _populateMementoArray,
   _trySpawnNewCache,

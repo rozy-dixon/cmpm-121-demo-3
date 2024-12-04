@@ -5,9 +5,6 @@
 import leaflet from "leaflet";
 import { LatLng, Marker } from "npm:@types/leaflet@^1.9.14";
 
-// UTILITY
-import { _getPosition } from "../utils/helper.ts";
-
 // CORE FUNCTIONALITY
 
 import { Board, Cell } from "./board.ts";
@@ -142,6 +139,20 @@ MAP.on("locationfound", function () {
 //#endregion
 
 //#region --------------------------------------- FUNCTIONS
+
+// get position of (actual) player
+export function _getPosition() {
+  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve(
+          leaflet.latLng(position.coords.latitude, position.coords.longitude),
+        );
+      },
+    );
+  });
+}
 
 export function updatePlayerCoinDisplay(
   div: HTMLDivElement,

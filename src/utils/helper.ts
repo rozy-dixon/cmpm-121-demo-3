@@ -1,10 +1,5 @@
 //#region -------------------------------------- IMPORTS
 
-// EXTERNAL LIBRARIES
-
-import leaflet from "leaflet";
-import "leaflet/dist/leaflet.css";
-
 // UTILS
 
 import luck from "../luck.ts";
@@ -71,20 +66,6 @@ export function _populateMementoArray(
 //#endregion
 
 //#region --------------------------------------- MAP AND PLAYER HELPERS
-
-// get position of (actual) player
-export function _getPosition() {
-  // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve(
-          leaflet.latLng(position.coords.latitude, position.coords.longitude),
-        );
-      },
-    );
-  });
-}
 
 export function _ensureCacheIsVisible(cache: Cache): void {
   if (!MAP.hasLayer(cache.rect)) {
