@@ -39,23 +39,19 @@ const APP_NAME = "orange couscous";
 document.getElementById("title")!.innerHTML = APP_NAME;
 const coinDiv = document.getElementById("coins")! as HTMLDivElement;
 
+// GAME STATE INITIALIZATION
+
 export let cacheArray: Array<Cache> = [];
 export let mementoArray: Array<string> = [];
 if (localStorage.getItem("mementoArray") != undefined) {
   mementoArray = JSON.parse(localStorage.getItem("mementoArray")!);
 }
 
-// GAME STATE INITIALIZATION
-
 if (localStorage.getItem("playerCoins") != undefined) {
   PLAYER.coins = JSON.parse(localStorage.getItem("playerCoins")!);
   updatePlayerCoinDisplay(coinDiv, PLAYER.coins);
   PLAYER.marker.setTooltipContent(`${PLAYER.coins.length}`);
 }
-
-//#endregion
-
-//#region --------------------------------------- CONTENT
 
 // UI updates
 document.getElementById("OrientPlayer")!.style.backgroundColor = "#ba6376";
@@ -78,6 +74,30 @@ document.dispatchEvent(PLAYER_MARKER_MOVED);
 //#endregion
 
 //#region --------------------------------------- SPAWN FUNCTIONS
+
+export function spawnCache(
+  cell: Cell,
+  coins: Array<Coin> | undefined = undefined,
+): Cache {
+  const rect = createRectangle(cell);
+  const cache: Cache = {
+    cell: cell,
+    coins: coins ? coins : generateCoins(cell),
+    rect: rect,
+    toMemento: function (): string {
+      return ""; // placeholder function
+    },
+    fromMemento: function (_memento: string): void {
+      // placeholder function
+    },
+  };
+
+  attachMementoMethods(cache);
+
+  allowCacheInteraction(cache);
+
+  return cache;
+}
 
 function generateCoins(cell: Cell): Array<Coin> {
   const numCoins = Math.floor(
@@ -110,30 +130,6 @@ function attachMementoMethods(cache: Cache): void {
       location: state.cell,
     }));
   };
-}
-
-export function spawnCache(
-  cell: Cell,
-  coins: Array<Coin> | undefined = undefined,
-): Cache {
-  const rect = createRectangle(cell);
-  const cache: Cache = {
-    cell: cell,
-    coins: coins ? coins : generateCoins(cell),
-    rect: rect,
-    toMemento: function (): string {
-      return ""; // placeholder function
-    },
-    fromMemento: function (_memento: string): void {
-      // placeholder function
-    },
-  };
-
-  attachMementoMethods(cache);
-
-  allowCacheInteraction(cache);
-
-  return cache;
 }
 
 //#endregion

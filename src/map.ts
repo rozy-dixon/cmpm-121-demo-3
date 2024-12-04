@@ -6,6 +6,7 @@ import leaflet from "leaflet";
 import { LatLng, Marker, Rectangle } from "npm:@types/leaflet@^1.9.14";
 
 // UTILITY
+
 import {
   _ensureCacheIsVisible,
   _getCache,
@@ -176,7 +177,7 @@ MAP.on("locationfound", function () {
 
 //#endregion
 
-//#region --------------------------------------- FUNCTIONS
+//#region --------------------------------------- PLAYER UPDATES
 
 export function updatePlayerCoinDisplay(
   div: HTMLDivElement,
