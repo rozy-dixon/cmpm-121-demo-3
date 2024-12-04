@@ -1,51 +1,42 @@
-//#region --------------------------------------- NOTES
-
-/*
-
-[option + shift + f] = format
-
-*/
-//#endregion
-
 //#region -------------------------------------- IMPORTS
 
+// EXTERNAL LIBRARIES
+
 import leaflet from "leaflet";
-import { Board } from "./board.ts";
 
-import "leaflet/dist/leaflet.css";
-import "./style.css";
+import { LatLng, Rectangle } from "npm:@types/leaflet@^1.9.14";
 
+// STYLE AND WORKAROUND
+
+import "./style/style.css";
 import "./leafletWorkaround.ts";
 
+// UTILITY
+
 import luck from "./luck.ts";
-import { LatLng, Marker, Rectangle } from "npm:@types/leaflet@^1.9.14";
-
-import { Cell } from "./board.ts";
-
 import {
-  _clearLocalStorage,
+  _ensureCacheIsVisible,
   _getCache,
   _getPosition,
   _populateCacheArray,
   _populateMementoArray,
-} from "./helper.ts";
+  _trySpawnNewCache,
+} from "./utils/helper.ts";
+
+// CORE FUNCTIONALITY
+
+import { Cell } from "./core/board.ts";
 import {
-  APP_NAME,
-  CACHE_SPAWN_PROBABILITY,
+  BOARD,
   MAP,
-  NEIGHBORHOOD_SIZE,
-  TILE_DEGREES,
-} from "./helper.ts";
+  PLAYER,
+  Player,
+  updatePlayerCoinDisplay,
+} from "./core/map.ts";
 
 //#endregion
 
 //#region --------------------------------------- INTERFACES
-
-interface Button {
-  text: string;
-  action: () => void;
-  id: string;
-}
 
 export interface Coin {
   location: Cell | Player;
@@ -60,44 +51,24 @@ export interface Cache {
   fromMemento(memento: string): void;
 }
 
-interface Player {
-  coords: LatLng;
-  cell: Cell;
-  marker: Marker;
-  coins: Array<Coin>;
-}
-
 //#endregion
 
 //#region --------------------------------------- SET-UP
 
+// UI INITIALIZATION
+
+const APP_NAME = "orange couscous";
 document.getElementById("title")!.innerHTML = APP_NAME;
-
-const interactionButtons: Array<Button> = [
-  { text: "↑", action: () => movePlayer(1, 0), id: "ArrowUp" },
-  { text: "↓", action: () => movePlayer(-1, 0), id: "ArrowDown" },
-  { text: "←", action: () => movePlayer(0, -1), id: "ArrowLeft" },
-  { text: "→", action: () => movePlayer(0, 1), id: "ArrowRight" },
-  {
-    text: "🚮",
-    action: () => initializeGameSession(),
-    id: "ClearLocalStorage",
-  },
-  { text: "🌐", action: () => orientPlayer(), id: "OrientPlayer" },
-];
-
-const buttonDiv = document.getElementById("buttons");
 const coinDiv = document.getElementById("coins")! as HTMLDivElement;
 
-const startPosition = await _getPosition() as LatLng;
-
-// create board
-const board: Board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
-let cacheArray: Array<Cache> = [];
+export let cacheArray: Array<Cache> = [];
 let mementoArray: Array<string> = [];
 if (localStorage.getItem("mementoArray") != undefined) {
   mementoArray = JSON.parse(localStorage.getItem("mementoArray")!);
 }
+
+// GAME STATE INITIALIZATION
+
 let playerMovementArray: Array<LatLng> = [];
 if (localStorage.getItem("playerMovementArray") != undefined) {
   playerMovementArray = JSON.parse(
@@ -105,48 +76,24 @@ if (localStorage.getItem("playerMovementArray") != undefined) {
   );
 }
 
-// create player
-// start player at starting position and no coins
-const playerMarker = leaflet.marker(startPosition, {
-  draggable: true,
-  autoPan: true,
-}).addTo(MAP);
-
-const player: Player = {
-  coords: startPosition,
-  cell: board.getCellForPoint(startPosition),
-  coins: [],
-  marker: playerMarker,
-};
-
 if (localStorage.getItem("playerCoins") != undefined) {
-  player.coins = JSON.parse(localStorage.getItem("playerCoins")!);
+  PLAYER.coins = JSON.parse(localStorage.getItem("playerCoins")!);
 }
 
-player.marker.bindTooltip(`${player.coins.length}`);
-let tracking = false;
+// MAP INITIALIZATION
+
 MAP.locate();
 
-MAP.on("locationfound", function () {
-  if (tracking) {
-    document.dispatchEvent(playerMarkerMoved);
-  }
-});
+const polyline = leaflet.polyline(playerMovementArray, {
+  color: "blue",
+  weight: 5,
+  opacity: 0.7,
+  lineJoin: "round",
+}).addTo(MAP);
 
-const playerMarkerMoved = new Event("player-marker-moved");
+// PLAYER MOVEMENT EVENT MANAGEMENT
 
-globalThis.addEventListener("keydown", (event: KeyboardEvent) => {
-  if (
-    ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].indexOf(event.key) !==
-      -1
-  ) {
-    const interactionButton = Array.from(
-      buttonDiv?.getElementsByTagName("button") || [],
-    ).find((button) => button.id === event.key);
-
-    interactionButton?.click();
-  }
-});
+export const PLAYER_MARKER_MOVED = new Event("player-marker-moved");
 
 document.addEventListener("player-marker-moved", () => {
   cacheArray.forEach((cache) => {
@@ -156,93 +103,64 @@ document.addEventListener("player-marker-moved", () => {
   mementoArray = _populateMementoArray(mementoArray, cacheArray);
   localStorage.setItem("mementoArray", JSON.stringify(mementoArray));
 
-  playerMovementArray.push(player.coords);
+  playerMovementArray.push(PLAYER.coords);
   polyline.setLatLngs(playerMovementArray);
   localStorage.setItem(
     "playerMovementArray",
     JSON.stringify(playerMovementArray),
   );
 
-  MAP.setView(player.coords);
-  spawnSurroundings(player.coords);
+  MAP.setView(PLAYER.coords);
+  spawnSurroundings(PLAYER.coords);
 });
-
-const polyline = leaflet.polyline(playerMovementArray, {
-  color: "blue",
-  weight: 5,
-  opacity: 0.7,
-  lineJoin: "round",
-}).addTo(MAP);
 
 //#endregion
 
 //#region --------------------------------------- CONTENT
 
-// add buttons to top of page
-interactionButtons.forEach((element) => {
-  const button = document.createElement("button");
-  button.id = element.id;
-  button.innerHTML = element.text;
-  button.addEventListener("click", element.action);
-  buttonDiv!.append(button);
-});
-
-updatePlayerCoinDisplay(coinDiv, player.coins);
-
+// UI updates
+updatePlayerCoinDisplay(coinDiv, PLAYER.coins);
 document.getElementById("OrientPlayer")!.style.backgroundColor = "#ba6376";
 
 // populate cache array from saved data
 cacheArray = _populateCacheArray(cacheArray, mementoArray);
-
 // populate board with caches
-spawnSurroundings(player.coords);
-document.dispatchEvent(playerMarkerMoved);
+spawnSurroundings(PLAYER.coords);
+
+// player movement event dispatch
+document.dispatchEvent(PLAYER_MARKER_MOVED);
 
 //#endregion
 
-//#region --------------------------------------- HELPER FUNCTIONS
+//#region --------------------------------------- SPAWN FUNCTIONS
 
-// create cache
-// anchor to cell, fill with coins, anchor rectangle
-export function spawnCache(
-  cell: Cell,
-  coins: Array<Coin> | undefined = undefined,
-) {
-  const rect = leaflet.rectangle(board.getCellBounds(cell), {
+function createRectangle(cell: Cell): L.Rectangle {
+  const rect = leaflet.rectangle(BOARD.getCellBounds(cell), {
     color: "#000000",
     weight: 2,
     fillColor: "#ffffff",
     fillOpacity: 0.5,
   });
   rect.addTo(MAP);
+  return rect;
+}
 
-  const cache: Cache = {
-    cell: cell,
-    coins: [],
-    rect: rect,
-    toMemento: function (): string {
-      return "";
-    },
-    fromMemento: function (_memento: string): void {
-    },
-  };
-
-  if (coins == undefined) {
-    const numCoins = Math.floor(
-      luck([cell.i, cell.j, "initialValue"].toString()) * 100,
-    );
-    for (let i = 0; i < numCoins; i++) {
-      const id: string = `${cell.i}:${cell.j}:${i}`;
-      cache.coins.push({
-        location: cell,
-        id: id,
-      });
-    }
-  } else {
-    cache.coins = coins;
+function generateCoins(cell: Cell): Array<Coin> {
+  const numCoins = Math.floor(
+    luck([cell.i, cell.j, "initialValue"].toString()) * 100,
+  );
+  const coins: Array<Coin> = [];
+  for (let i = 0; i < numCoins; i++) {
+    const id: string = `${cell.i}:${cell.j}:${i}`;
+    coins.push({
+      location: cell,
+      id: id,
+    });
   }
+  return coins;
+}
 
-  // applying functions
+function attachMementoMethods(cache: Cache): void {
   cache.toMemento = function (): string {
     return JSON.stringify({
       cell: cache.cell,
@@ -252,35 +170,54 @@ export function spawnCache(
 
   cache.fromMemento = function (memento: string): void {
     const state = JSON.parse(memento);
-    cache.cell = state.cell,
-      cache.coins = state.coins.MAP((coin: Coin) => ({
-        ...coin,
-        location: state.cell,
-      }));
+    cache.cell = state.cell;
+    cache.coins = state.coins.map((coin: Coin) => ({
+      ...coin,
+      location: state.cell,
+    }));
+  };
+}
+
+export function spawnCache(
+  cell: Cell,
+  coins: Array<Coin> | undefined = undefined,
+): Cache {
+  const rect = createRectangle(cell);
+  const cache: Cache = {
+    cell: cell,
+    coins: coins ? coins : generateCoins(cell),
+    rect: rect,
+    toMemento: function (): string {
+      return ""; // placeholder function
+    },
+    fromMemento: function (_memento: string): void {
+      // placeholder function
+    },
   };
 
-  // player will interact with cache via collect and deposit
+  attachMementoMethods(cache);
+
   allowCacheInteraction(cache);
 
   return cache;
 }
 
-// populate cells around provided coordinates
-function spawnSurroundings(coords: LatLng) {
-  // src = https://chat.brace.tools/s/12df7b24-bd45-4cb3-b69c-5a982779d964
-  board.getCellsNearPoint(coords).forEach((cell) => {
+function spawnSurroundings(coords: LatLng): void {
+  const nearbyCells = BOARD.getCellsNearPoint(coords);
+
+  nearbyCells.forEach((cell) => {
     const cache = _getCache(cell, cacheArray);
     if (cache) {
-      if (!MAP.hasLayer(cache.rect)) {
-        MAP.addLayer(cache.rect);
-      }
-      return;
-    } else if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      const newCache = spawnCache(cell);
-      cacheArray.push(newCache);
+      _ensureCacheIsVisible(cache);
+    } else {
+      _trySpawnNewCache(cell);
     }
   });
 }
+
+//#endregion
+
+//#region --------------------------------------- INTERACTION FUNCTIONS
 
 // add collect and deposit capabilities to provided cache
 function allowCacheInteraction(cache: Cache) {
@@ -307,8 +244,8 @@ function allowCacheInteraction(cache: Cache) {
     popupDiv.querySelector<HTMLButtonElement>("#deposit")?.addEventListener(
       "click",
       () => {
-        if (player.coins.length > 0) {
-          const coin = player.coins[player.coins.length - 1];
+        if (PLAYER.coins.length > 0) {
+          const coin = PLAYER.coins[PLAYER.coins.length - 1];
           adjustCache(-1, cache, coin, popupDiv);
         }
       },
@@ -319,7 +256,6 @@ function allowCacheInteraction(cache: Cache) {
 }
 
 // functions as both collect and deposit functions
-// allows for chunking
 function adjustCache(
   amount: number,
   cache: Cache,
@@ -330,79 +266,29 @@ function adjustCache(
     return;
   }
 
-  const exitArray = amount < 0 ? player.coins : cache.coins;
-  const enterArray = amount < 0 ? cache.coins : player.coins;
+  const exitArray = amount < 0 ? PLAYER.coins : cache.coins;
+  const enterArray = amount < 0 ? cache.coins : PLAYER.coins;
 
   enterArray.push(coin);
   exitArray.splice(exitArray.length - Math.abs(amount), Math.abs(amount));
 
-  player.marker.setTooltipContent(`${player.coins.length}`);
+  PLAYER.marker.setTooltipContent(`${PLAYER.coins.length}`);
   popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML = cache.coins
     .length.toString();
 
   mementoArray = _populateMementoArray(mementoArray, cacheArray);
   localStorage.setItem("mementoArray", JSON.stringify(mementoArray));
-  localStorage.setItem("playerCoins", JSON.stringify(player.coins));
+  localStorage.setItem("playerCoins", JSON.stringify(PLAYER.coins));
 
-  updatePlayerCoinDisplay(coinDiv, player.coins);
+  updatePlayerCoinDisplay(coinDiv, PLAYER.coins);
 }
 
-function updatePlayerCoinDisplay(div: HTMLDivElement, coins: Array<Coin>) {
-  const buttons = Array.from(div.getElementsByClassName("coinButton"));
-  buttons.forEach((element) => {
-    div.removeChild(element);
-  });
-
-  coins.forEach((element) => {
-    const button = document.createElement("button");
-    button.className = "coinButton";
-    button.id = "coin";
-    button.innerHTML = element.id;
-    button.addEventListener("click", () => {
-      const coord = leaflet.latLng(button.innerHTML.split(":", 2));
-      MAP.setView(
-        leaflet.latLng([
-          (coord.lat) * TILE_DEGREES,
-          (coord.lng) * TILE_DEGREES,
-        ]),
-      );
-    });
-    div?.append(button);
-  });
-}
-
-function movePlayer(lat: number, lng: number) {
-  const newLat = playerMarker.getLatLng().lat + (lat * TILE_DEGREES);
-  const newLng = playerMarker.getLatLng().lng + (lng * TILE_DEGREES);
-
-  playerMarker.setLatLng(leaflet.latLng(newLat, newLng));
-
-  player.coords = leaflet.latLng(newLat, newLng);
-  player.cell = board.getCellForPoint(player.coords);
-
-  document.dispatchEvent(playerMarkerMoved);
-}
-
-function orientPlayer() {
-  const button = document.getElementById("OrientPlayer");
-  if (
-    button?.style.backgroundColor === "#9cba63" ||
-    button?.style.backgroundColor === "rgb(156, 186, 99)"
-  ) {
-    button!.style.backgroundColor = "#ba6376"; // off
-    tracking = false;
-  } else {
-    button!.style.backgroundColor = "#9cba63"; // on
-    tracking = true;
-  }
-}
-
-function initializeGameSession() {
+export function initializeGameSession() {
   if (!confirm("are you sure?")) {
     return;
   }
 
-  _clearLocalStorage();
+  clearLocalStorage();
 
   playerMovementArray = [];
   polyline.setLatLngs(playerMovementArray);
@@ -411,12 +297,20 @@ function initializeGameSession() {
   cacheArray = [];
   cacheArray = _populateCacheArray(cacheArray, mementoArray);
 
-  player.coins = [];
-  player.marker.setTooltipContent(`${player.coins.length}`);
-  localStorage.setItem("playerCoins", JSON.stringify(player.coins));
+  PLAYER.coins = [];
+  PLAYER.marker.setTooltipContent(`${PLAYER.coins.length}`);
+  localStorage.setItem("playerCoins", JSON.stringify(PLAYER.coins));
 
-  spawnSurroundings(player.coords);
-  document.dispatchEvent(playerMarkerMoved);
+  spawnSurroundings(PLAYER.coords);
+  document.dispatchEvent(PLAYER_MARKER_MOVED);
+}
+
+function clearLocalStorage() {
+  localStorage.clear();
+
+  cacheArray.forEach((cache) => {
+    MAP.removeLayer(cache.rect);
+  });
 }
 
 //#endregion
