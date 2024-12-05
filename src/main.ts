@@ -1,3 +1,7 @@
+// notes
+
+// address src=
+
 //#region -------------------------------------- IMPORTS
 
 // STYLE AND WORKAROUND
@@ -27,8 +31,9 @@ import {
   PLAYER,
   resetPlayerView,
   spawnSurroundings,
-  updatePlayerCoinDisplay,
 } from "./core/map.ts";
+
+import { updatePlayerCoinDisplay } from "./core/ui.ts";
 
 //#endregion
 
