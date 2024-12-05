@@ -22,7 +22,7 @@ interface Button {
 
 //#endregion
 
-// BUTTON UI INITIALIZATION
+//#region --------------------------------------- TOP ROW DISPLAY
 
 const buttonDiv = document.getElementById("buttons");
 const interactionButtons: Array<Button> = [
@@ -54,6 +54,10 @@ globalThis.addEventListener("keydown", (event: KeyboardEvent) => {
   ).find((button) => button.id === event.key);
   interactionButton?.click();
 });
+
+//#endregion
+
+//#region --------------------------------------- BOTTOM ROW DISPLAY
 
 export function updatePlayerCoinDisplay(
   div: HTMLDivElement,
@@ -96,3 +100,5 @@ function orientPlayer() {
     tracking = true;
   }
 }
+
+//#endregion
