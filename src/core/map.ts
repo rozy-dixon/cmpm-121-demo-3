@@ -97,7 +97,7 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const startPosition = await _getPosition() as LatLng;
 
-let playerMovementArray: Array<LatLng> = [];
+export let playerMovementArray: Array<LatLng> = [];
 if (localStorage.getItem("playerMovementArray") != undefined) {
   playerMovementArray = JSON.parse(
     localStorage.getItem("playerMovementArray")!,
@@ -124,7 +124,7 @@ PLAYER.marker.bindTooltip(`${PLAYER.coins.length}`);
 
 MAP.locate();
 
-const polyline = leaflet.polyline(playerMovementArray, {
+export const polyline = leaflet.polyline(playerMovementArray, {
   color: "blue",
   weight: 5,
   opacity: 0.7,
@@ -203,35 +203,6 @@ export function spawnSurroundings(coords: LatLng): void {
   });
 }
 
-//#endregion
-
-//#region --------------------------------------- RESETS
-
-export function initializeGameSession(
-  mementoArray: Array<string>,
-  cacheArray: Array<Cache>,
-) {
-  if (!confirm("are you sure?")) {
-    return;
-  }
-
-  clearLocalStorage();
-
-  playerMovementArray = [];
-  polyline.setLatLngs(playerMovementArray);
-
-  mementoArray = [];
-  cacheArray = [];
-  cacheArray = _populateCacheArray(cacheArray, mementoArray);
-
-  PLAYER.coins = [];
-  PLAYER.marker.setTooltipContent(`${PLAYER.coins.length}`);
-  localStorage.setItem("playerCoins", JSON.stringify(PLAYER.coins));
-
-  spawnSurroundings(PLAYER.coords);
-  document.dispatchEvent(PLAYER_MARKER_MOVED);
-}
-
 // get position of (actual) player
 export function _getPosition() {
   // src = https://chat.brace.tools/s/05a34133-2b96-41e8-b9c2-21f0301335d0
@@ -243,14 +214,6 @@ export function _getPosition() {
         );
       },
     );
-  });
-}
-
-function clearLocalStorage() {
-  localStorage.clear();
-
-  cacheArray.forEach((cache) => {
-    MAP.removeLayer(cache.rect);
   });
 }
 

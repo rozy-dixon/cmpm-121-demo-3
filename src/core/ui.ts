@@ -6,14 +6,9 @@ import leaflet from "leaflet";
 
 // CORE FUNCTIONALITY
 
-import {
-  Coin,
-  initializeGameSession,
-  MAP,
-  movePlayer,
-  TILE_DEGREES,
-} from "./map.ts";
+import { Coin, MAP, movePlayer, TILE_DEGREES } from "./map.ts";
 import { cacheArray, mementoArray } from "../main.ts";
+import { initializeGameSession } from "../utils/clear.ts";
 
 //#endregion
 
